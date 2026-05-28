@@ -1,0 +1,8 @@
+{
+  "name": "Markr",
+  "description": "An automated evaluation tool that compares answer sheets against question papers, identifies errors with visual bounding boxes, and tracks student progress.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
