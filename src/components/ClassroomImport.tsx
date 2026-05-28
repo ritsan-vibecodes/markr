@@ -14,7 +14,11 @@ import {
   FileText,
   AlertTriangle,
   Loader2,
-  ChevronDown
+  ChevronDown,
+  Search,
+  Folder,
+  ArrowLeft,
+  RefreshCw
 } from 'lucide-react';
 import { googleSignIn, logout, getAccessToken, auth } from '../lib/firebase';
 import { User as FirebaseUser } from 'firebase/auth';
@@ -37,11 +41,28 @@ export default function ClassroomImport({ onClose, onImport }: ClassroomImportPr
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
 
+  // Active tab toggle: classroom sync vs direct drive explorer
+  const [activePortalTab, setActivePortalTab] = useState<'classroom' | 'drive'>('classroom');
+
   // Classroom API loading states
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [loadingWork, setLoadingWork] = useState(false);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
   const [loadingFile, setLoadingFile] = useState<string | null>(null);
+
+  // Google Drive freeform explorer states
+  const [driveFiles, setDriveFiles] = useState<any[]>([]);
+  const [folderPath, setFolderPath] = useState<Array<{ id: string; name: string }>>([
+    { id: 'root', name: 'My Drive' }
+  ]);
+  const [currentFolderId, setCurrentFolderId] = useState<string>('root');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [loadingDrive, setLoadingDrive] = useState<boolean>(false);
+
+  const [selectedDriveQp, setSelectedDriveQp] = useState<{ id: string; name: string; mimeType: string } | null>(null);
+  const [selectedDriveAs, setSelectedDriveAs] = useState<{ id: string; name: string; mimeType: string } | null>(null);
+  const [driveStudentName, setDriveStudentName] = useState<string>('');
+  const [driveSubject, setDriveSubject] = useState<string>('');
 
   // Fetched data state
   const [courses, setCourses] = useState<any[]>([]);
@@ -73,6 +94,7 @@ export default function ClassroomImport({ onClose, onImport }: ClassroomImportPr
         if (token) {
           setAccessToken(token);
           fetchCourses(token);
+          fetchDriveFiles('root', '', token);
         } else {
           // If in-memory token is gone on refresh, guide user to login again
           setCurrentUser(null);
@@ -95,6 +117,7 @@ export default function ClassroomImport({ onClose, onImport }: ClassroomImportPr
         setCurrentUser(result.user);
         setAccessToken(result.accessToken);
         fetchCourses(result.accessToken);
+        fetchDriveFiles('root', '', result.accessToken);
       }
     } catch (err: any) {
       setErrMessage(err.message || 'Google authentication failed.');
@@ -113,8 +136,77 @@ export default function ClassroomImport({ onClose, onImport }: ClassroomImportPr
       setSelectedCourse('');
       setSelectedAssignment('');
       setSelectedSubmission(null);
+
+      // Clear Drive browser states too
+      setDriveFiles([]);
+      setFolderPath([{ id: 'root', name: 'My Drive' }]);
+      setCurrentFolderId('root');
+      setSearchQuery('');
+      setSelectedDriveQp(null);
+      setSelectedDriveAs(null);
+      setDriveStudentName('');
+      setDriveSubject('');
     } catch (err: any) {
       setErrMessage(err.message);
+    }
+  };
+
+  // Google Drive API helper functions
+  const fetchDriveFiles = async (folderId: string, search: string, token: string) => {
+    setLoadingDrive(true);
+    setErrMessage(null);
+    try {
+      let q = `'${folderId}' in parents and trashed = false`;
+      if (search) {
+        q = `name contains '${search.replace(/'/g, "\\'")}' and trashed = false`;
+      }
+      const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,size,iconLink)&pageSize=100`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Could not retrieve target Drive files. Check scopes.');
+      const data = await res.json();
+      setDriveFiles(data.files || []);
+    } catch (err: any) {
+      setErrMessage(err.message);
+    } finally {
+      setLoadingDrive(false);
+    }
+  };
+
+  const handleDriveFolderClick = (folderId: string, name: string) => {
+    const folderExistsInPath = folderPath.some(item => item.id === folderId);
+    if (!folderExistsInPath) {
+      setFolderPath((prev) => [...prev, { id: folderId, name }]);
+    }
+    setCurrentFolderId(folderId);
+    setSearchQuery('');
+    if (accessToken) {
+      fetchDriveFiles(folderId, '', accessToken);
+    }
+  };
+
+  const handleBreadcrumbClick = (index: number) => {
+    const targetPath = folderPath.slice(0, index + 1);
+    const targetFolder = targetPath[targetPath.length - 1];
+    setFolderPath(targetPath);
+    setCurrentFolderId(targetFolder.id);
+    setSearchQuery('');
+    if (accessToken) {
+      fetchDriveFiles(targetFolder.id, '', accessToken);
+    }
+  };
+
+  const handleDriveSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (accessToken) {
+      fetchDriveFiles(currentFolderId, searchQuery, accessToken);
+    }
+  };
+
+  const handleRefreshDrive = () => {
+    if (accessToken) {
+      fetchDriveFiles(currentFolderId, searchQuery, accessToken);
     }
   };
 
@@ -260,8 +352,21 @@ export default function ClassroomImport({ onClose, onImport }: ClassroomImportPr
     const meta = await metaRes.json();
     const mimeType = meta.mimeType || 'image/jpeg';
 
+    let url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+    let finalMime = mimeType;
+
+    // Handle Google Document, Spreadsheet, Presentation files via exports
+    const isGoogleDoc = mimeType === 'application/vnd.google-apps.document';
+    const isGoogleSheet = mimeType === 'application/vnd.google-apps.spreadsheet';
+    const isGoogleSlides = mimeType === 'application/vnd.google-apps.presentation';
+
+    if (isGoogleDoc || isGoogleSheet || isGoogleSlides) {
+      url = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=application/pdf`;
+      finalMime = 'application/pdf';
+    }
+
     // 2. Download raw media chunks
-    const altRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    const altRes = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!altRes.ok) throw new Error(`Could not load Drive media contents [ID: ${fileId}].`);
@@ -273,7 +378,7 @@ export default function ClassroomImport({ onClose, onImport }: ClassroomImportPr
       reader.onloadend = () => {
         resolve({
           data: reader.result as string,
-          mimeType,
+          mimeType: finalMime,
           name: meta.name || 'document'
         });
       };
@@ -284,7 +389,7 @@ export default function ClassroomImport({ onClose, onImport }: ClassroomImportPr
 
   const executeImport = async () => {
     if (!accessToken) return;
-    setStatusMessage('Syncing Classroom details to grader desks...');
+    setStatusMessage('Syncing files to grader desks...');
     setErrMessage(null);
 
     let qpImgMeta: any = null;
@@ -293,36 +398,100 @@ export default function ClassroomImport({ onClose, onImport }: ClassroomImportPr
     let asText = '';
 
     try {
-      // 1. Fetch Question Paper if file target selected
-      if (selectedQpFileId) {
-        setLoadingFile('question');
-        try {
-          const fileData = await downloadDriveFileBase64(selectedQpFileId, accessToken);
-          // Check if image or document
-          if (fileData.mimeType.startsWith('image/') || fileData.mimeType === 'application/pdf') {
-            qpImgMeta = {
-              data: fileData.data,
-              mimeType: fileData.mimeType,
-              fileName: fileData.name
-            };
-          } else {
-            // Assume plain text / doc file fallback
-            qpText = `Imported questions from document: ${fileData.name}`;
+      if (activePortalTab === 'classroom') {
+        // 1. Fetch Question Paper if file target selected
+        if (selectedQpFileId) {
+          setLoadingFile('question');
+          try {
+            const fileData = await downloadDriveFileBase64(selectedQpFileId, accessToken);
+            // Check if image or document
+            if (fileData.mimeType.startsWith('image/') || fileData.mimeType === 'application/pdf') {
+              qpImgMeta = {
+                data: fileData.data,
+                mimeType: fileData.mimeType,
+                fileName: fileData.name
+              };
+            } else {
+              // Assume plain text / doc file fallback
+              qpText = `Imported questions from document: ${fileData.name}`;
+            }
+          } catch (err: any) {
+            throw new Error(`Question Import Error: ${err.message}`);
           }
-        } catch (err: any) {
-          throw new Error(`Question Import Error: ${err.message}`);
+        } else {
+          // Fallback to coursework instruction text
+          const currentWork = assignments.find(w => w.id === selectedAssignment);
+          qpText = currentWork?.description || 'Class Assignment Question Set';
         }
-      } else {
-        // Fallback to coursework instruction text
-        const currentWork = assignments.find(w => w.id === selectedAssignment);
-        qpText = currentWork?.description || 'Class Assignment Question Set';
-      }
 
-      // 2. Fetch Answer Sheet File target
-      if (selectedAsFileId) {
+        // 2. Fetch Answer Sheet File target
+        if (selectedAsFileId) {
+          setLoadingFile('answer');
+          try {
+            const fileData = await downloadDriveFileBase64(selectedAsFileId, accessToken);
+            if (fileData.mimeType.startsWith('image/') || fileData.mimeType === 'application/pdf') {
+              asImgMeta = {
+                data: fileData.data,
+                mimeType: fileData.mimeType,
+                fileName: fileData.name
+              };
+            } else {
+              asText = `Imported text answer from document: ${fileData.name}`;
+            }
+          } catch (err: any) {
+            throw new Error(`Answer Import Error: ${err.message}`);
+          }
+        } else {
+          throw new Error('Please select at least one student submission attachment file to grade.');
+        }
+
+        // Identify student and course properties
+        const sName = studentsMap[selectedSubmission?.userId] || `Google Classroom User (${selectedSubmission?.userId || 'Unknown'})`;
+        const courseObj = courses.find(c => c.id === selectedCourse);
+        const assignmentObj = assignments.find(w => w.id === selectedAssignment);
+        const subject = `${courseObj?.name || 'Classroom Course'} - ${assignmentObj?.title || 'Assignment'}`;
+
+        setStatusMessage(null);
+        // Execute parent callback state loading pipeline
+        onImport({
+          questionPaperText: qpText,
+          questionPaperImgMeta: qpImgMeta,
+          answerSheetImgMeta: asImgMeta,
+          answerSheetText: asText,
+          studentName: sName,
+          subject: subject
+        });
+      } else {
+        // Google Drive Freeform Import
+        if (!selectedDriveAs) {
+          throw new Error('Please select an Answer Sheet file from Google Drive.');
+        }
+
+        // Download Question Paper if selected
+        if (selectedDriveQp) {
+          setLoadingFile('question');
+          try {
+            const fileData = await downloadDriveFileBase64(selectedDriveQp.id, accessToken);
+            if (fileData.mimeType.startsWith('image/') || fileData.mimeType === 'application/pdf') {
+              qpImgMeta = {
+                data: fileData.data,
+                mimeType: fileData.mimeType,
+                fileName: fileData.name
+              };
+            } else {
+              qpText = `Imported questions from document: ${fileData.name}`;
+            }
+          } catch (err: any) {
+            throw new Error(`Question Import Error: ${err.message}`);
+          }
+        } else {
+          qpText = 'General Drive Grader assessment criteria.';
+        }
+
+        // Download Answer Sheet (Mandatory)
         setLoadingFile('answer');
         try {
-          const fileData = await downloadDriveFileBase64(selectedAsFileId, accessToken);
+          const fileData = await downloadDriveFileBase64(selectedDriveAs.id, accessToken);
           if (fileData.mimeType.startsWith('image/') || fileData.mimeType === 'application/pdf') {
             asImgMeta = {
               data: fileData.data,
@@ -330,31 +499,25 @@ export default function ClassroomImport({ onClose, onImport }: ClassroomImportPr
               fileName: fileData.name
             };
           } else {
-            asText = `Imported text answer from document: ${fileData.name}`;
+            asText = `Imported answers text: ${fileData.name}`;
           }
         } catch (err: any) {
           throw new Error(`Answer Import Error: ${err.message}`);
         }
-      } else {
-        throw new Error('Please select at least one student submission attachment file to grade.');
+
+        const sName = driveStudentName.trim() || 'Drive Student';
+        const subject = driveSubject.trim() || selectedDriveQp?.name || 'Drive Assignment';
+
+        setStatusMessage(null);
+        onImport({
+          questionPaperText: qpText,
+          questionPaperImgMeta: qpImgMeta,
+          answerSheetImgMeta: asImgMeta,
+          answerSheetText: asText,
+          studentName: sName,
+          subject: subject
+        });
       }
-
-      // Identify student and course properties
-      const sName = studentsMap[selectedSubmission?.userId] || `Google Classroom User (${selectedSubmission?.userId || 'Unknown'})`;
-      const courseObj = courses.find(c => c.id === selectedCourse);
-      const assignmentObj = assignments.find(w => w.id === selectedAssignment);
-      const subject = `${courseObj?.name || 'Classroom Course'} - ${assignmentObj?.title || 'Assignment'}`;
-
-      setStatusMessage(null);
-      // Execute parent callback state loading pipeline
-      onImport({
-        questionPaperText: qpText,
-        questionPaperImgMeta: qpImgMeta,
-        answerSheetImgMeta: asImgMeta,
-        answerSheetText: asText,
-        studentName: sName,
-        subject: subject
-      });
 
       // Done
       onClose();
@@ -442,13 +605,13 @@ export default function ClassroomImport({ onClose, onImport }: ClassroomImportPr
             </div>
           ) : (
             <div className="space-y-5">
-              {/* Connected details */}
+              {/* Connected details header */}
               <div className="flex items-center justify-between bg-gray-50 rounded-xl p-3 border border-gray-100 text-xs">
                 <div className="flex items-center gap-2">
                   <img
                     src={currentUser.photoURL || ''}
                     alt={currentUser.displayName || ''}
-                    className="w-6 h-6 rounded-full border border-gray-200"
+                    className="w-6 h-6 rounded-full border border-gray-200 animate-in fade-in"
                     referrerPolicy="no-referrer"
                   />
                   <div>
@@ -457,67 +620,70 @@ export default function ClassroomImport({ onClose, onImport }: ClassroomImportPr
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={handleSignOut}
-                  className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                  className="text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors text-[11px] font-semibold select-none"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   Sign Out
                 </button>
               </div>
 
-              {/* Wizard Selector Flow */}
-              <div className="space-y-4">
-                {/* 1. Course Selection */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">
-                    1. Select Classroom Course
-                  </label>
-                  {loadingCourses ? (
-                    <div className="flex items-center gap-2 py-2.5 text-xs text-gray-500">
-                      <Loader2 className="w-4 h-4 animate-spin text-gray-900" />
-                      Loading active academic courses...
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <select
-                        value={selectedCourse}
-                        onChange={(e) => handleCourseChange(e.target.value)}
-                        className="w-full text-xs px-3 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg outline-none cursor-pointer focus:border-gray-900 appearance-none font-medium"
-                      >
-                        <option value="">-- Choose active class course --</option>
-                        {courses.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name} {c.section ? `(${c.section})` : ''}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                    </div>
-                  )}
-                </div>
+              {/* Dynamic Interactive Tabs */}
+              <div className="flex border-b border-gray-100/80">
+                <button
+                  type="button"
+                  onClick={() => setActivePortalTab('classroom')}
+                  className={`flex-1 text-xs font-bold text-center border-b-2 pb-2 transition-all cursor-pointer ${
+                    activePortalTab === 'classroom'
+                      ? 'border-gray-950 text-gray-950 font-bold'
+                      : 'border-transparent text-gray-400 hover:text-gray-700 font-semibold'
+                  }`}
+                >
+                  🏫 Classroom Portal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePortalTab('drive');
+                    if (driveFiles.length === 0 && accessToken) {
+                      fetchDriveFiles(currentFolderId, '', accessToken);
+                    }
+                  }}
+                  className={`flex-1 text-xs font-bold text-center border-b-2 pb-2 transition-all cursor-pointer ${
+                    activePortalTab === 'drive'
+                      ? 'border-gray-950 text-gray-950 font-bold'
+                      : 'border-transparent text-gray-400 hover:text-gray-700 font-semibold'
+                  }`}
+                >
+                  📁 Google Drive Explorer
+                </button>
+              </div>
 
-                {/* 2. Assignment Selection */}
-                {selectedCourse && (
+              {/* TAB 1: classroom selector sync workflow */}
+              {activePortalTab === 'classroom' ? (
+                <div className="space-y-4">
+                  {/* 1. Course Selection */}
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">
-                      2. Select Assignment (Coursework)
+                      1. Select Classroom Course
                     </label>
-                    {loadingWork ? (
+                    {loadingCourses ? (
                       <div className="flex items-center gap-2 py-2.5 text-xs text-gray-500">
                         <Loader2 className="w-4 h-4 animate-spin text-gray-900" />
-                        Fetching course objectives and rubrics...
+                        Loading active academic courses...
                       </div>
                     ) : (
                       <div className="relative">
                         <select
-                          value={selectedAssignment}
-                          onChange={(e) => handleAssignmentChange(e.target.value)}
-                          className="w-full text-xs px-3 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg outline-none cursor-pointer focus:border-gray-900 appearance-none font-medium"
+                          value={selectedCourse}
+                          onChange={(e) => handleCourseChange(e.target.value)}
+                          className="w-full text-xs px-3 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg outline-none cursor-pointer focus:border-gray-900 appearance-none font-medium text-gray-800"
                         >
-                          <option value="">-- Choose assignment coursework --</option>
-                          {assignments.map((w) => (
-                            <option key={w.id} value={w.id}>
-                              {w.title}
+                          <option value="">-- Choose active class course --</option>
+                          {courses.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} {c.section ? `(${c.section})` : ''}
                             </option>
                           ))}
                         </select>
@@ -525,128 +691,387 @@ export default function ClassroomImport({ onClose, onImport }: ClassroomImportPr
                       </div>
                     )}
                   </div>
-                )}
 
-                {/* 3. Student Submissions List */}
-                {selectedAssignment && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-gray-100 pt-4">
-                    {/* Student List */}
-                    <div className="space-y-1.5 text-left">
+                  {/* 2. Assignment Selection */}
+                  {selectedCourse && (
+                    <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">
-                        3. Identify Student Submission
+                        2. Select Assignment (Coursework)
                       </label>
-                      {loadingSubmissions ? (
-                        <div className="flex items-center gap-2 py-4 text-xs text-gray-400">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Pulling submitted sheets...
-                        </div>
-                      ) : submissions.length === 0 ? (
-                        <div className="text-xs text-gray-400 bg-gray-50/50 p-4 border border-dashed rounded-lg text-center">
-                          No student submissions found/submitted yet.
+                      {loadingWork ? (
+                        <div className="flex items-center gap-2 py-2.5 text-xs text-gray-500">
+                          <Loader2 className="w-4 h-4 animate-spin text-gray-900" />
+                          Fetching course objectives and rubrics...
                         </div>
                       ) : (
-                        <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
-                          {submissions.map((sub) => {
-                            const isSelected = selectedSubmission?.id === sub.id;
-                            const attachmentsCount = sub.assignmentSubmission?.attachments?.length || 0;
-
-                            return (
-                              <button
-                                key={sub.id}
-                                onClick={() => handleSubmissionSelect(sub)}
-                                className={`w-full text-left p-2.5 rounded-lg border text-xs transition-all flex items-center justify-between ${
-                                  isSelected
-                                    ? 'bg-gray-900 text-white border-gray-900 shadow-xs'
-                                    : 'bg-white border-gray-150 hover:bg-gray-50/50'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2 truncate">
-                                  <User className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : 'text-gray-400'}`} />
-                                  <span className="font-semibold truncate">{getStudentText(sub.userId)}</span>
-                                </div>
-                                <span className={`text-[9px] font-mono whitespace-nowrap leading-none ${
-                                  isSelected ? 'text-gray-200' : 'text-gray-400'
-                                }`}>
-                                  {attachmentsCount} attachments
-                                </span>
-                              </button>
-                            );
-                          })}
+                        <div className="relative">
+                          <select
+                            value={selectedAssignment}
+                            onChange={(e) => handleAssignmentChange(e.target.value)}
+                            className="w-full text-xs px-3 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg outline-none cursor-pointer focus:border-gray-900 appearance-none font-medium text-gray-800"
+                          >
+                            <option value="">-- Choose assignment coursework --</option>
+                            {assignments.map((w) => (
+                              <option key={w.id} value={w.id}>
+                                {w.title}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                         </div>
                       )}
                     </div>
+                  )}
 
-                    {/* File Attachment Target Selector */}
-                    <div className="space-y-3">
-                      <div>
+                  {/* 3. Student Submissions List */}
+                  {selectedAssignment && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-gray-100 pt-4">
+                      {/* Student List */}
+                      <div className="space-y-1.5 text-left font-sans">
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">
-                          4. Grading Targets Alignment
+                          3. Identify Student Submission
                         </label>
-
-                        {selectedSubmission ? (
-                          <div className="bg-gray-50 border border-gray-100 rounded-xl p-3.5 space-y-3 text-xs text-left">
-                            {/* Question Paper Selector */}
-                            <div>
-                              <span className="text-[9px] font-mono font-bold text-gray-400 block uppercase mb-1">
-                                Align Question Paper
-                              </span>
-                              {selectedQpFileName ? (
-                                <div className="flex items-center gap-1.5 text-gray-800 font-semibold bg-white border rounded px-2.5 py-1.5 text-[11px] truncate">
-                                  <FileText className="w-3.5 h-3.5 text-amber-500" />
-                                  <span className="truncate">{selectedQpFileName}</span>
-                                </div>
-                              ) : (
-                                <div className="text-[10px] text-gray-400 italic">
-                                  No file attached to assignment. Will automatically import assignment description guidelines instead.
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Answer Sheet Selector */}
-                            <div>
-                              <span className="text-[9px] font-mono font-bold text-gray-400 block uppercase mb-1">
-                                Align Answer Sheet
-                              </span>
-                              {selectedSubmission?.assignmentSubmission?.attachments &&
-                              selectedSubmission.assignmentSubmission.attachments.length > 0 ? (
-                                <div className="relative">
-                                  <select
-                                    value={selectedAsFileId}
-                                    onChange={(e) => {
-                                      const fid = e.target.value;
-                                      setSelectedAsFileId(fid);
-                                      const original = selectedSubmission.assignmentSubmission.attachments.find(
-                                        (a: any) => a.driveFile?.id === fid
-                                      );
-                                      setSelectedAsFileName(original?.driveFile?.title || 'Answer Sheet');
-                                    }}
-                                    className="w-full text-[11px] px-2 py-1.5 bg-white border rounded outline-none focus:border-gray-900 font-medium"
-                                  >
-                                    {selectedSubmission.assignmentSubmission.attachments.map((att: any, index: number) => (
-                                      <option key={index} value={att.driveFile?.id || ''}>
-                                        {att.driveFile?.title || `File attachment ${index + 1}`}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              ) : (
-                                <div className="text-[10px] text-red-500 font-medium flex items-center gap-1 mt-1">
-                                  <AlertTriangle className="w-3.5 h-3.5" />
-                                  Student has not submitted any attachments.
-                                </div>
-                              )}
-                            </div>
+                        {loadingSubmissions ? (
+                          <div className="flex items-center gap-2 py-4 text-xs text-gray-400">
+                            <Loader2 className="w-4 h-4 animate-spin text-gray-905" />
+                            Pulling submitted sheets...
+                          </div>
+                        ) : submissions.length === 0 ? (
+                          <div className="text-xs text-gray-400 bg-gray-50/50 p-4 border border-dashed rounded-lg text-center font-semibold">
+                            No student submissions found/submitted yet.
                           </div>
                         ) : (
-                          <div className="border border-dashed border-gray-200 rounded-xl p-6 bg-gray-50/50 text-center text-xs text-gray-400 select-none">
-                            Select a student on the left to align files
+                          <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
+                            {submissions.map((sub) => {
+                              const isSelected = selectedSubmission?.id === sub.id;
+                              const attachmentsCount = sub.assignmentSubmission?.attachments?.length || 0;
+
+                              return (
+                                <button
+                                  type="button"
+                                  key={sub.id}
+                                  onClick={() => handleSubmissionSelect(sub)}
+                                  className={`w-full text-left p-2.5 rounded-lg border text-xs transition-all flex items-center justify-between cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-gray-900 text-white border-gray-900 shadow-xs'
+                                      : 'bg-white border-gray-150 hover:bg-gray-50/50'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 truncate">
+                                    <User className={`w-3.5 h-3.5 flex-shrink-0 ${isSelected ? 'text-white' : 'text-gray-400'}`} />
+                                    <span className="font-semibold truncate">{getStudentText(sub.userId)}</span>
+                                  </div>
+                                  <span className={`text-[9.5px] font-mono whitespace-nowrap leading-none ${
+                                    isSelected ? 'text-gray-200' : 'text-gray-400'
+                                  }`}>
+                                    {attachmentsCount} files
+                                  </span>
+                                </button>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
+
+                      {/* File Attachment Target Selector */}
+                      <div className="space-y-3 font-sans">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">
+                            4. Grading Targets Alignment
+                          </label>
+
+                          {selectedSubmission ? (
+                            <div className="bg-gray-50 border border-gray-100 rounded-xl p-3.5 space-y-3 text-xs text-left">
+                              {/* Question Paper Selector */}
+                              <div>
+                                <span className="text-[9.5px] font-mono font-bold text-gray-400 block uppercase mb-1">
+                                  Align Question Paper
+                                </span>
+                                {selectedQpFileName ? (
+                                  <div className="flex items-center gap-1.5 text-gray-800 font-semibold bg-white border rounded px-2.5 py-1.5 text-[11px] truncate">
+                                    <FileText className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                                    <span className="truncate">{selectedQpFileName}</span>
+                                  </div>
+                                ) : (
+                                  <div className="text-[10px] text-gray-400 italic font-medium">
+                                    No file attached to assignment. Will automatically import assignment description guidelines instead.
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Answer Sheet Selector */}
+                              <div>
+                                <span className="text-[9.5px] font-mono font-bold text-gray-400 block uppercase mb-1">
+                                  Align Answer Sheet
+                                </span>
+                                {selectedSubmission?.assignmentSubmission?.attachments &&
+                                selectedSubmission.assignmentSubmission.attachments.length > 0 ? (
+                                  <div className="relative">
+                                    <select
+                                      value={selectedAsFileId}
+                                      onChange={(e) => {
+                                        const fid = e.target.value;
+                                        setSelectedAsFileId(fid);
+                                        const original = selectedSubmission.assignmentSubmission.attachments.find(
+                                          (a: any) => a.driveFile?.id === fid
+                                        );
+                                        setSelectedAsFileName(original?.driveFile?.title || 'Answer Sheet');
+                                      }}
+                                      className="w-full text-[11px] px-2 py-1.5 bg-white border rounded outline-none focus:border-gray-900 font-medium"
+                                    >
+                                      {selectedSubmission.assignmentSubmission.attachments.map((att: any, index: number) => (
+                                        <option key={index} value={att.driveFile?.id || ''}>
+                                          {att.driveFile?.title || `File attachment ${index + 1}`}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                ) : (
+                                  <div className="text-[10px] text-red-500 font-medium flex items-center gap-1 mt-1">
+                                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                                    Student has not submitted any attachments.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="border border-dashed border-gray-200 rounded-xl p-6 bg-gray-50/50 text-center text-xs text-gray-400 select-none font-semibold">
+                              Select a student on the left to align files and assignments
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* TAB 2: custom live Drive explorer */
+                <div className="space-y-4">
+                  {/* Breadcrumb folder navigation */}
+                  <div className="flex items-center gap-1 flex-wrap text-xs bg-gray-50 p-2.5 rounded-xl border border-gray-100/80">
+                    {folderPath.map((folder, index) => (
+                      <React.Fragment key={folder.id}>
+                        {index > 0 && <span className="text-gray-300">/</span>}
+                        <button
+                          type="button"
+                          onClick={() => handleBreadcrumbClick(index)}
+                          className={`hover:underline cursor-pointer font-bold ${
+                            index === folderPath.length - 1 ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'
+                          }`}
+                        >
+                          {index === 0 ? 'My Drive' : folder.name}
+                        </button>
+                      </React.Fragment>
+                    ))}
+                  </div>
+
+                  {/* Search filter row with live triggers */}
+                  <form onSubmit={handleDriveSearch} className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        placeholder="Search files in My Google Drive..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full text-xs pl-8 pr-12 py-2 bg-gray-50/50 focus:bg-white hover:bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-gray-900 text-gray-800"
+                      />
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery('');
+                            if (accessToken) fetchDriveFiles(currentFolderId, '', accessToken);
+                          }}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 hover:text-gray-600 font-bold uppercase select-none cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="submit"
+                      className="px-3 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-xs font-semibold cursor-pointer select-none transition-all active:scale-98"
+                    >
+                      Find
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRefreshDrive}
+                      className="p-2 border border-gray-200 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-gray-900 cursor-pointer transition-colors"
+                      title="Refresh file portal"
+                    >
+                      <RefreshCw className="w-4 h-4 animate-duration-1000" />
+                    </button>
+                  </form>
+
+                  {/* Hierarchical files folder list */}
+                  <div className="max-h-[220px] overflow-y-auto border border-gray-150 rounded-xl p-2 bg-gray-50/30 space-y-1">
+                    {loadingDrive ? (
+                      <div className="flex flex-col items-center justify-center py-12 text-xs text-gray-500 gap-2.5 font-medium">
+                        <Loader2 className="w-5 h-5 animate-spin text-gray-900" />
+                        Scanning Drive index records...
+                      </div>
+                    ) : driveFiles.length === 0 ? (
+                      <div className="text-center py-12 text-xs text-gray-400 font-semibold">
+                        This folder contains no matching files, images, or compatible documents.
+                      </div>
+                    ) : (
+                      driveFiles.map((file) => {
+                        const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
+                        const isSelectedQp = selectedDriveQp?.id === file.id;
+                        const isSelectedAs = selectedDriveAs?.id === file.id;
+
+                        // Identify icons
+                        let IconComponent = FileText;
+                        let iconColor = 'text-gray-400';
+                        
+                        if (isFolder) {
+                          IconComponent = Folder;
+                          iconColor = 'text-blue-500 fill-blue-50';
+                        } else if (file.mimeType.startsWith('image/')) {
+                          IconComponent = FileText;
+                          iconColor = 'text-orange-500';
+                        } else if (file.mimeType === 'application/pdf') {
+                          IconComponent = FileText;
+                          iconColor = 'text-red-500';
+                        } else if (file.mimeType === 'application/vnd.google-apps.document') {
+                          IconComponent = FileText;
+                          iconColor = 'text-blue-600';
+                        } else if (file.mimeType === 'application/vnd.google-apps.spreadsheet') {
+                          IconComponent = FileSpreadsheet;
+                          iconColor = 'text-green-600';
+                        }
+
+                        return (
+                          <div
+                            key={file.id}
+                            className="flex items-center justify-between p-2 hover:bg-white border border-transparent hover:border-gray-100 rounded-lg text-xs gap-3 transition-colors group"
+                          >
+                            <div
+                              className={`flex items-center gap-2 truncate ${isFolder ? 'cursor-pointer hover:underline' : ''} flex-1`}
+                              onClick={() => {
+                                if (isFolder) handleDriveFolderClick(file.id, file.name);
+                              }}
+                            >
+                              <IconComponent className={`w-4 h-4 flex-shrink-0 ${iconColor}`} />
+                              <span className="font-semibold text-gray-700 truncate group-hover:text-gray-900 select-none">
+                                {file.name}
+                              </span>
+                            </div>
+
+                            {!isFolder && (
+                              <div className="flex gap-1.5 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedDriveQp(isSelectedQp ? null : { id: file.id, name: file.name, mimeType: file.mimeType })}
+                                  className={`px-2.5 py-1 rounded-md text-[10px] font-bold border cursor-pointer transition-all select-none ${
+                                    isSelectedQp
+                                      ? 'bg-amber-100 border-amber-300 text-amber-800'
+                                      : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+                                  }`}
+                                >
+                                  {isSelectedQp ? '✓ Question Paper' : '+ Question Paper'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedDriveAs(isSelectedAs ? null : { id: file.id, name: file.name, mimeType: file.mimeType })}
+                                  className={`px-2.5 py-1 rounded-md text-[10px] font-bold border cursor-pointer transition-all select-none ${
+                                    isSelectedAs
+                                      ? 'bg-blue-100 border-blue-300 text-blue-800'
+                                      : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+                                  }`}
+                                >
+                                  {isSelectedAs ? '✓ Answer Sheet' : '+ Answer Sheet'}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Alignment preview & metadata values */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-gray-150/60 pt-4 mt-2">
+                    {/* Highlight target selections */}
+                    <div className="space-y-2 text-left">
+                      <label className="block text-[10px] font-mono font-bold text-gray-400 uppercase tracking-widest">
+                        Selection Targets Preview
+                      </label>
+                      <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 space-y-2.5 text-[11px]">
+                        <div>
+                          <span className="text-[9px] font-mono text-gray-400 uppercase block leading-none mb-1">
+                            Current Question Key
+                          </span>
+                          {selectedDriveQp ? (
+                            <div className="flex items-center justify-between font-bold text-gray-800 bg-white border border-gray-150 px-2 py-1.5 rounded-lg truncate">
+                              <span className="truncate pr-1">{selectedDriveQp.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedDriveQp(null)}
+                                className="text-red-500 hover:text-red-700 text-[10px] font-extrabold cursor-pointer text-right ml-1 select-none"
+                              >
+                                Clear
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[10.5px] text-gray-400 italic font-medium">None aligned (Default description rubric)</span>
+                          )}
+                        </div>
+
+                        <div>
+                          <span className="text-[9px] font-mono text-gray-400 uppercase block leading-none mb-1">
+                            Student answer layout
+                          </span>
+                          {selectedDriveAs ? (
+                            <div className="flex items-center justify-between font-bold text-gray-800 bg-white border border-gray-150 px-2 py-1.5 rounded-lg truncate">
+                              <span className="truncate pr-1">{selectedDriveAs.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedDriveAs(null)}
+                                className="text-red-500 hover:text-red-700 text-[10px] font-extrabold cursor-pointer text-right ml-1 select-none"
+                              >
+                                Clear
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[10.5px] text-red-500 font-bold">Please align an Answer Sheet target file</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Metadata Overrides for student name & subject */}
+                    <div className="space-y-3 text-left">
+                      <div>
+                        <label className="block text-[10px] font-mono font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                          Student Name Override
+                        </label>
+                        <input
+                          type="text"
+                          value={driveStudentName}
+                          onChange={(e) => setDriveStudentName(e.target.value)}
+                          placeholder="Detect automatically, or type student name"
+                          className="w-full text-xs px-3 py-2.5 bg-gray-50/50 focus:bg-white border rounded-lg outline-none focus:border-gray-900 font-medium text-gray-800"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-mono font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                          Subject / Exam Category Title
+                        </label>
+                        <input
+                          type="text"
+                          value={driveSubject}
+                          onChange={(e) => setDriveSubject(e.target.value)}
+                          placeholder="Detect automatically, or type subject theme"
+                          className="w-full text-xs px-3 py-2.5 bg-gray-50/50 focus:bg-white border rounded-lg outline-none focus:border-gray-900 font-medium text-gray-800"
+                        />
+                      </div>
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -655,10 +1080,10 @@ export default function ClassroomImport({ onClose, onImport }: ClassroomImportPr
         <div className="p-5 border-t border-gray-100 flex items-center justify-between bg-gray-50/50">
           <div className="text-[10px] text-gray-400 font-mono flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            OAUTH CLASSRROOM SECURED
+            WORKSPACE SECURITY CONFIRMED
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 font-sans">
             <button
               onClick={onClose}
               className="px-4 py-2 border border-gray-200 hover:bg-gray-100 text-gray-700 bg-white rounded-lg text-xs font-semibold select-none cursor-pointer"
@@ -667,8 +1092,12 @@ export default function ClassroomImport({ onClose, onImport }: ClassroomImportPr
             </button>
             <button
               onClick={executeImport}
-              disabled={!selectedSubmission || !selectedAsFileId || !!loadingFile}
-              className="px-4 py-2 rounded-lg bg-gray-950 text-white hover:bg-gray-800 disabled:bg-gray-100 disabled:text-gray-400 text-xs font-semibold flex items-center gap-2 select-none cursor-pointer"
+              disabled={
+                activePortalTab === 'classroom'
+                  ? (!selectedSubmission || !selectedAsFileId || !!loadingFile)
+                  : (!selectedDriveAs || !!loadingFile)
+              }
+              className="px-4 py-2 rounded-lg bg-gray-950 text-white hover:bg-gray-800 disabled:bg-gray-100 disabled:text-gray-400 text-xs font-semibold flex items-center gap-2 select-none cursor-pointer border border-transparent disabled:border-gray-150 transition-all"
             >
               {loadingFile ? (
                 <>
@@ -678,7 +1107,7 @@ export default function ClassroomImport({ onClose, onImport }: ClassroomImportPr
               ) : (
                 <>
                   <Download className="w-3.5 h-3.5" />
-                  Import Selected Files
+                  Import Selected Papers
                 </>
               )}
             </button>

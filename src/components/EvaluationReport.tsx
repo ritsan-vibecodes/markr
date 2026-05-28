@@ -306,8 +306,8 @@ export default function EvaluationReport({ evaluation }: EvaluationReportProps) 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="flex items-center gap-3">
-              <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider font-mono">
-                Academic Report
+              <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider font-mono">
+                My Self-Evaluation Match
               </span>
               <button
                 onClick={handleExportPDF}
@@ -318,13 +318,13 @@ export default function EvaluationReport({ evaluation }: EvaluationReportProps) 
                 Download PDF Report
               </button>
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{studentName}</h1>
+            <h1 className="text-xl font-bold text-gray-900 tracking-tight">{subject || 'Practice Exam'}</h1>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-gray-500 font-sans">
-              <span className="font-semibold text-gray-800">{subject}</span>
+              <span className="font-semibold text-gray-800">Assessed by: {studentName || 'Self-Evaluator'}</span>
               <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
-              <span>Exam Date: {examDate}</span>
+              <span>Checked Date: {examDate}</span>
               <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
-              <span>ID: {evaluation.id}</span>
+              <span className="font-mono text-[10px]">ID: {evaluation.id}</span>
             </div>
           </div>
 
@@ -358,7 +358,7 @@ export default function EvaluationReport({ evaluation }: EvaluationReportProps) 
             </div>
 
             <div className="text-right">
-              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-mono">Grade Score</p>
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-mono">My Accuracy</p>
               <p className="text-2xl font-bold text-gray-900 mt-0.5">
                 {score} <span className="text-gray-400 text-sm font-normal">/ {totalMarks}</span>
               </p>
@@ -369,7 +369,7 @@ export default function EvaluationReport({ evaluation }: EvaluationReportProps) 
         {/* Analytical overall assessment */}
         <div className="mt-6 border-t border-gray-100 pt-5 text-left leading-relaxed">
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2 font-mono">
-            Summary Overview
+            Analysis Overview
           </h3>
           <p className="text-sm text-gray-700 leading-relaxed font-sans">
             {overallStats || 'The evaluation successfully catalogued and rated all answers.'}
@@ -386,7 +386,7 @@ export default function EvaluationReport({ evaluation }: EvaluationReportProps) 
               <Award className="w-4.5 h-4.5 text-emerald-600" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-gray-900 tracking-tight">Glow Points</h3>
+              <h3 className="text-sm font-bold text-gray-900 tracking-tight">What I Did Well</h3>
               <p className="text-[10px] text-emerald-600 font-medium">Core achievements and correct logic</p>
             </div>
           </div>
@@ -402,7 +402,7 @@ export default function EvaluationReport({ evaluation }: EvaluationReportProps) 
               <Zap className="w-4.5 h-4.5 text-amber-600" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-gray-900 tracking-tight">Grow Advice</h3>
+              <h3 className="text-sm font-bold text-gray-900 tracking-tight">Improvement Plan</h3>
               <p className="text-[10px] text-amber-600 font-medium font-mono">Remedial learning targets & fixes</p>
             </div>
           </div>

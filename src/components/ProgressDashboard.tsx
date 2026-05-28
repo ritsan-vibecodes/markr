@@ -49,12 +49,12 @@ export default function ProgressDashboard({ analyticsData, onSelectReportId }: P
         <div className="bg-white rounded-2xl border border-gray-100 p-5 text-left flex items-start justify-between hover:shadow-xs transition-shadow">
           <div className="space-y-2">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">
-              Total Evaluated
+              Total Checked
             </p>
             <p className="text-2xl font-bold text-gray-900 tracking-tight">
               {stats.totalEvaluations}
             </p>
-            <p className="text-[10px] text-gray-500 leading-none">Complete exams marked</p>
+            <p className="text-[10px] text-gray-500 leading-none">Self-evaluated papers completed</p>
           </div>
           <div className="w-9 h-9 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500">
             <Layers className="w-5 h-5" />
@@ -65,12 +65,12 @@ export default function ProgressDashboard({ analyticsData, onSelectReportId }: P
         <div className="bg-white rounded-2xl border border-gray-100 p-5 text-left flex items-start justify-between hover:shadow-xs transition-shadow">
           <div className="space-y-2">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">
-              Class Accuracy Avg
+              My Avg Accuracy
             </p>
             <p className="text-2xl font-bold text-gray-900 tracking-tight">
               {stats.averagePercentage}%
             </p>
-            <p className="text-[10px] text-gray-500 leading-none">Out of 100 maximum points</p>
+            <p className="text-[10px] text-gray-500 leading-none">Averaged self-evaluation score</p>
           </div>
           <div className="w-9 h-9 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500">
             <TrendingUp className="w-5 h-5" />
@@ -81,7 +81,7 @@ export default function ProgressDashboard({ analyticsData, onSelectReportId }: P
         <div className="bg-white rounded-2xl border border-gray-100 p-5 text-left flex items-start justify-between hover:shadow-xs transition-shadow">
           <div className="space-y-2">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">
-              Flawless Marks
+              Flawless Papers
             </p>
             <p className="text-2xl font-bold text-gray-900 tracking-tight">
               {stats.perfectScores}
@@ -187,8 +187,8 @@ export default function ProgressDashboard({ analyticsData, onSelectReportId }: P
 
       {/* History table log */}
       <div className="bg-white rounded-2xl border border-gray-100 p-6 text-left shadow-sm">
-        <h3 className="text-sm font-semibold text-gray-900 tracking-tight">Student History Tracker</h3>
-        <p className="text-xs text-gray-500 mt-0.5">Track over time logs with instant access click triggers</p>
+        <h3 className="text-sm font-semibold text-gray-900 tracking-tight">My Self-Correction Logs</h3>
+        <p className="text-xs text-gray-500 mt-0.5">Track over time study logs with instant access click triggers</p>
 
         <div className="mt-5 border border-gray-100 rounded-xl overflow-hidden font-sans">
           <div className="overflow-x-auto">
@@ -196,8 +196,8 @@ export default function ProgressDashboard({ analyticsData, onSelectReportId }: P
               <thead>
                 <tr className="bg-gray-50/75 border-b border-gray-100 text-xs font-bold font-mono text-gray-400 uppercase">
                   <th className="p-3.5 pl-5">Date</th>
-                  <th className="p-3.5">Student Name</th>
-                  <th className="p-3.5">Subject</th>
+                  <th className="p-3.5">Assessed Name</th>
+                  <th className="p-3.5">Course / Subject</th>
                   <th className="p-3.5">Score Ratio</th>
                   <th className="p-3.5 text-right pr-5">Review</th>
                 </tr>

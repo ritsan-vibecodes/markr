@@ -40,9 +40,9 @@ export default function HistoryList({ historyItems, onSelectId, onDeleteId, load
       <div>
         <h2 className="text-lg font-semibold text-gray-900 tracking-tight flex items-center gap-2">
           <Calendar className="w-5 h-5 text-gray-500" />
-          Saved Evaluations
+          My Saved Papers
         </h2>
-        <p className="text-xs text-gray-500 mt-0.5">Browse past annotated submissions and pedagogical stats</p>
+        <p className="text-xs text-gray-500 mt-0.5">Browse past annotated self-evaluations and learning guides</p>
       </div>
 
       {/* Controls & Search */}
@@ -53,7 +53,7 @@ export default function HistoryList({ historyItems, onSelectId, onDeleteId, load
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by student name or subject topics..."
+            placeholder="Search by subject course or name..."
             className="w-full text-xs pl-9.5 pr-4 py-2.5 bg-gray-50/50 hover:bg-gray-50 focus:bg-white rounded-lg border border-gray-200 outline-none focus:border-gray-900 transition-all font-sans placeholder-gray-400"
           />
         </div>
@@ -78,9 +78,9 @@ export default function HistoryList({ historyItems, onSelectId, onDeleteId, load
       {filteredItems.length === 0 ? (
         <div className="border border-dashed border-gray-100 bg-gray-50/30 rounded-xl py-12 text-center flex flex-col items-center justify-center font-sans">
           <HelpCircle className="w-8 h-8 text-gray-300 mb-2" />
-          <p className="text-xs font-semibold text-gray-800">No Evaluations Found</p>
+          <p className="text-xs font-semibold text-gray-800">No Papers Found</p>
           <p className="text-[10px] text-gray-500 max-w-[200px] leading-normal mx-auto mt-0.5">
-            Try adjusting your search criteria, or submit a new set of test papers.
+            Try adjusting your search criteria, or submit a new self-evaluation paper.
           </p>
         </div>
       ) : (
@@ -95,7 +95,7 @@ export default function HistoryList({ historyItems, onSelectId, onDeleteId, load
               >
                 <div>
                   <div className="flex items-start justify-between gap-3">
-                    <span className="text-[10px] font-mono text-gray-400 font-medium">{item.examDate}</span>
+                    <span className="text-[10px] font-mono text-gray-450 font-medium">{item.examDate}</span>
                     <span className={`px-2 py-0.5 rounded-full font-mono font-bold text-[10px] ${
                       pct >= 85 ? 'bg-emerald-50 text-emerald-800' : pct >= 65 ? 'bg-blue-50 text-blue-800' : 'bg-amber-50 text-amber-800'
                     }`}>
@@ -103,13 +103,13 @@ export default function HistoryList({ historyItems, onSelectId, onDeleteId, load
                     </span>
                   </div>
 
-                  <h3 className="text-sm font-semibold text-gray-800 tracking-tight mt-2 truncate group-hover:text-gray-900">
-                    {item.studentName}
+                  <h3 className="text-sm font-bold text-gray-850 tracking-tight mt-2 truncate group-hover:text-gray-950">
+                    {item.subject}
                   </h3>
-                  <p className="text-xs text-gray-500 font-medium truncate mt-0.5">{item.subject}</p>
+                  <p className="text-xs text-gray-500 font-medium truncate mt-0.5">Profile: {item.studentName || 'Self'}</p>
 
                   <div className="text-[11px] text-gray-400 font-sans mt-3">
-                    Score: <span className="font-semibold text-gray-700">{item.score}/{item.totalMarks} points</span>
+                    Marks: <span className="font-semibold text-gray-750">{item.score}/{item.totalMarks} points</span>
                   </div>
                 </div>
 

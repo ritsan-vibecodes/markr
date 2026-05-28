@@ -159,13 +159,13 @@ export default function EvaluationForm({ onEvaluate, loading, importedData }: Ev
         <div>
           <h2 className="text-lg font-semibold text-gray-900 tracking-tight flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-gray-500" />
-            Evaluation Setup
+            Study Paper Setup
           </h2>
-          <p className="text-xs text-gray-500 mt-0.5">Initialize grading schema and upload submissions</p>
+          <p className="text-xs text-gray-500 mt-0.5">Configure exam criteria and scan your own submissions</p>
         </div>
         <div className="bg-gray-50 px-2.5 py-1 rounded-full text-[11px] font-mono font-medium text-gray-500 flex items-center gap-1">
-          <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-          AI-PRO READY
+          <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-pulse"></span>
+          STUDENT GRADER
         </div>
       </div>
 
@@ -173,29 +173,29 @@ export default function EvaluationForm({ onEvaluate, loading, importedData }: Ev
         {/* Overrides block */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
+            <label className="block text-xs font-semibold text-gray-750 mb-1.5 flex items-center gap-1.5">
               <User className="w-3.5 h-3.5 text-gray-400" />
-              Student Name <span className="text-gray-400 font-normal">(Optional)</span>
+              Your Name <span className="text-gray-400 font-normal">(Optional)</span>
             </label>
             <input
               type="text"
               value={studentName}
               onChange={(e) => setStudentName(e.target.value)}
-              placeholder="Auto-detects from handwriting, or type here"
-              className="w-full text-sm px-3.5 py-2.5 bg-gray-50/50 hover:bg-gray-50 focus:bg-white rounded-lg border border-gray-200 outline-none focus:border-gray-900 transition-all font-sans placeholder-gray-400"
+              placeholder="e.g. Alex (or self)"
+              className="w-full text-xs px-3.5 py-2.5 bg-gray-50/50 hover:bg-gray-50 focus:bg-white rounded-lg border border-gray-200 outline-none focus:border-gray-900 transition-all font-sans placeholder-gray-400"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
+            <label className="block text-xs font-semibold text-gray-750 mb-1.5 flex items-center gap-1.5">
               <BookOpen className="w-3.5 h-3.5 text-gray-400" />
-              Subject / Topic <span className="text-gray-400 font-normal">(Optional)</span>
+              Subject / Course Name <span className="text-gray-400 font-normal">(Optional)</span>
             </label>
             <input
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="e.g. calculus exam, physics rubric"
-              className="w-full text-sm px-3.5 py-2.5 bg-gray-50/50 hover:bg-gray-50 focus:bg-white rounded-lg border border-gray-200 outline-none focus:border-gray-900 transition-all font-sans placeholder-gray-400"
+              placeholder="e.g. Physics Midterm, Calculus Practice"
+              className="w-full text-xs px-3.5 py-2.5 bg-gray-50/50 hover:bg-gray-50 focus:bg-white rounded-lg border border-gray-200 outline-none focus:border-gray-900 transition-all font-sans placeholder-gray-400"
             />
           </div>
         </div>
@@ -203,8 +203,8 @@ export default function EvaluationForm({ onEvaluate, loading, importedData }: Ev
         {/* Question Paper Card */}
         <div className="border border-gray-100 rounded-xl p-4 bg-gray-50/20">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-900 tracking-tight">
-              1. Question Paper or Answer Key
+            <h3 className="text-xs font-bold text-gray-900 tracking-tight uppercase">
+              1. Exam Questions or Answer Key
             </h3>
             <div className="flex rounded-lg bg-gray-100 p-0.5">
               <button
@@ -281,28 +281,28 @@ export default function EvaluationForm({ onEvaluate, loading, importedData }: Ev
           )}
         </div>
 
-        {/* Student Answer paper Card */}
+        {/* Your Answer paper Card */}
         <div className="border border-gray-100 rounded-xl p-4 bg-gray-50/20 w-full">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-900 tracking-tight">
-              2. Student Answer Sheet
+            <h3 className="text-sm font-bold text-gray-900 tracking-tight uppercase">
+              2. Your Completed Answer Paper
             </h3>
-            <div className="flex rounded-lg bg-gray-100 p-0.5">
+            <div className="flex rounded-lg bg-gray-100 p-0.5 animate-none">
               <button
                 onClick={() => setAsType('image')}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                  asType === 'image' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                  asType === 'image' ? 'bg-white text-gray-950 shadow-xs' : 'text-gray-500 hover:text-gray-950'
                 }`}
               >
                 Image / PDF
               </button>
               <button
                 onClick={() => setAsType('text')}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                  asType === 'text' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                  asType === 'text' ? 'bg-white text-gray-950 shadow-xs' : 'text-gray-500 hover:text-gray-950'
                 }`}
               >
-                Text
+                Text Input
               </button>
             </div>
           </div>
@@ -311,9 +311,9 @@ export default function EvaluationForm({ onEvaluate, loading, importedData }: Ev
             <textarea
               value={asText}
               onChange={(e) => setAsText(e.target.value)}
-              placeholder="Type or copy-paste the student's handwritten transcript or digital answers here..."
+              placeholder="Paste or type your draft answers, homework solutions, or exam text essay here..."
               rows={4}
-              className="w-full text-sm p-3 bg-white border border-gray-200 rounded-lg outline-none focus:border-gray-900 transition-all font-sans placeholder-gray-400 resize-none"
+              className="w-full text-xs p-3 bg-white border border-gray-200 rounded-lg outline-none focus:border-gray-900 transition-all font-sans placeholder-gray-400 resize-none"
             />
           ) : (
             <div
@@ -366,16 +366,16 @@ export default function EvaluationForm({ onEvaluate, loading, importedData }: Ev
         <button
           onClick={triggerEvaluation}
           disabled={loading || !isFormValid()}
-          className={`w-full py-3 px-4 rounded-xl font-medium text-sm transition-all focus:outline-none flex items-center justify-center gap-2 ${
+          className={`w-full py-3 px-4 rounded-xl font-semibold text-xs transition-all focus:outline-none flex items-center justify-center gap-2 cursor-pointer ${
             loading
               ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
               : isFormValid()
-              ? 'bg-gray-900 hover:bg-gray-800 text-white cursor-pointer active:scale-99/100 shadow-sm'
+              ? 'bg-gray-950 hover:bg-gray-900 text-white active:scale-99/100 shadow-sm'
               : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
           }`}
         >
-          <Sparkles className={`w-4 h-4 ${loading ? 'animate-spin text-gray-400' : 'text-amber-400'}`} />
-          {loading ? 'AI Grader Evaluating Submissions...' : 'Analyze & Evaluate Papers'}
+          <Sparkles className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-gray-400' : 'text-amber-400'}`} />
+          {loading ? 'AI Study Companion Parsing...' : 'Analyze & Self-Evaluate Paper'}
         </button>
       </div>
     </div>
