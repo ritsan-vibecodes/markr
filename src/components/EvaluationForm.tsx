@@ -157,15 +157,11 @@ export default function EvaluationForm({ onEvaluate, loading, importedData }: Ev
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden p-6">
       <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-6">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900 tracking-tight flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-gray-500" />
+          <h2 className="text-lg font-bold text-gray-900 tracking-tight flex items-center gap-2">
+            <BookOpen className="w-5.5 h-5.5 text-gray-700" />
             Study Paper Setup
           </h2>
-          <p className="text-xs text-gray-500 mt-0.5">Configure exam criteria and scan your own submissions</p>
-        </div>
-        <div className="bg-gray-50 px-2.5 py-1 rounded-full text-[11px] font-mono font-medium text-gray-500 flex items-center gap-1">
-          <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-pulse"></span>
-          STUDENT GRADER
+          <p className="text-xs text-gray-500 mt-1">Configure exam criteria and scan your own submissions</p>
         </div>
       </div>
 

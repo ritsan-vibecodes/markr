@@ -50,6 +50,8 @@ export default function App() {
     timeline: []
   });
 
+  const [isFormCollapsed, setIsFormCollapsed] = useState(false);
+
   // Loaders & Errors
   const [loading, setLoading] = useState(false);
   const [loadingHistoryItem, setLoadingHistoryItem] = useState<string | null>(null);
@@ -160,6 +162,7 @@ export default function App() {
       const report: EvaluationResult = await res.json();
       setActiveReport(report);
       setActiveWorkspaceTab('report');
+      setIsFormCollapsed(true);
 
       // Refresh listings
       await fetchHistorySummaries();
@@ -185,6 +188,7 @@ export default function App() {
       const fullReport: EvaluationResult = await res.json();
       setActiveReport(fullReport);
       setActiveWorkspaceTab('report');
+      setIsFormCollapsed(true);
       // Slide view focus
       setActiveTab('evaluate');
     } catch (err: any) {
@@ -317,9 +321,6 @@ export default function App() {
                   <span className="text-[10px] font-bold text-gray-800 leading-normal">
                     {user.displayName || "Student"}
                   </span>
-                  <span className="text-[7.5px] font-mono font-bold text-emerald-600 leading-none uppercase tracking-wider">
-                    SECURED
-                  </span>
                 </div>
                 <button
                   onClick={handleSignOut}
@@ -330,13 +331,6 @@ export default function App() {
                 </button>
               </div>
             )}
-
-            <div className="hidden sm:flex items-center gap-2 text-xs">
-              <span className="flex items-center gap-1 bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full font-mono text-[9px] border border-amber-100/50">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                VLM ANNOTATION MODEL: READY
-              </span>
-            </div>
 
             {/* Main view navigation cards */}
             <nav className="flex space-x-1 bg-gray-100 p-1 rounded-xl">
@@ -402,41 +396,53 @@ export default function App() {
         {/* Dynamic Display Router */}
         {activeTab === 'evaluate' && (
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
-            {/* Input Form Column */}
-            <div className="xl:col-span-5 space-y-4">
-              <button
-                onClick={() => setShowClassroomModal(true)}
-                className="w-full py-3 px-4 rounded-xl border border-dashed border-gray-250 hover:border-gray-950 bg-white hover:bg-gray-50/50 text-gray-800 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs hover:shadow-sm"
-              >
-                <div className="w-5 h-5 bg-emerald-600 rounded flex items-center justify-center text-white font-serif font-extrabold text-[10px] shadow-xs">
-                  G
-                </div>
-                Self-Import My Coursework (Classroom & Drive)
-              </button>
+            {/* Input Form Column (Injected conditionally when setup is expanded or no assessment is active) */}
+            {(!activeReport || !isFormCollapsed) && (
+              <div className="xl:col-span-5 space-y-4">
+                <button
+                  onClick={() => setShowClassroomModal(true)}
+                  className="w-full py-3 px-4 rounded-xl border border-dashed border-gray-250 hover:border-gray-950 bg-white hover:bg-gray-50/50 text-gray-800 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs hover:shadow-sm"
+                >
+                  <div className="w-5 h-5 bg-emerald-600 rounded flex items-center justify-center text-white font-serif font-extrabold text-[10px] shadow-xs">
+                    G
+                  </div>
+                  Self-Import My Coursework (Classroom & Drive)
+                </button>
 
-              <EvaluationForm
-                onEvaluate={handleEvaluatePaper}
-                loading={loading}
-                importedData={importedClassroomData}
-              />
-            </div>
+                <EvaluationForm
+                  onEvaluate={handleEvaluatePaper}
+                  loading={loading}
+                  importedData={importedClassroomData}
+                />
+              </div>
+            )}
 
             {/* Evaluation Results Monitor Column */}
-            <div className="xl:col-span-7 space-y-6">
+            <div className={(!activeReport || !isFormCollapsed) ? "xl:col-span-7 space-y-6" : "xl:col-span-12 space-y-6"}>
               {activeReport ? (
                 <div className="space-y-6">
                   {/* Results Sub-Tab Controller */}
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="text-left">
-                      <span className="text-[10px] font-mono font-extrabold text-gray-400 uppercase tracking-wider">
-                        Active Study Workspace
-                      </span>
-                      <h2 className="text-sm font-bold text-gray-800 truncate max-w-xs sm:max-w-md">
-                        {activeReport.subject} — {activeReport.studentName}
-                      </h2>
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="text-left flex items-center gap-3">
+                      <button
+                        onClick={() => setIsFormCollapsed(!isFormCollapsed)}
+                        title={isFormCollapsed ? "Show Paper Setup" : "Hide Paper Setup"}
+                        className="px-2.5 py-1.5 bg-gray-50 hover:bg-gray-100 active:bg-gray-150 text-gray-700 font-semibold text-xs border border-gray-200 hover:border-gray-300 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Layers className="w-3.5 h-3.5 text-amber-500" />
+                        <span>{isFormCollapsed ? "Show Setup" : "Hide Setup"}</span>
+                      </button>
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block font-mono">
+                          Active Study Workspace
+                        </span>
+                        <h2 className="text-sm font-bold text-gray-800 truncate max-w-xs sm:max-w-md">
+                          {activeReport.subject} — {activeReport.studentName}
+                        </h2>
+                      </div>
                     </div>
 
-                    <div className="flex bg-gray-100 p-0.5 rounded-xl self-start sm:self-auto">
+                    <div className="flex bg-gray-100 p-0.5 rounded-xl self-start md:self-auto">
                       <button
                         onClick={() => setActiveWorkspaceTab('report')}
                         className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
@@ -524,21 +530,25 @@ export default function App() {
 
       {/* Modern Humble Sandbox Footer */}
       <footer className="bg-white border-t border-gray-100 py-6 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="text-xs text-gray-500">
-            &copy; {new Date().getFullYear()} Markr study companion. Built in AI Studio for student self-checks.
-          </div>
-          <div className="flex items-center gap-4 text-[11px] text-gray-400 font-mono">
-            <span>PERSISTENT EXAMS STORAGE</span>
-            <span>VLM ANNOTATOR: ACTIVE</span>
-          </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-gray-500">
+          &copy; {new Date().getFullYear()} Markr study companion. Built in AI Studio for student self-checks.
         </div>
       </footer>
 
       {showClassroomModal && (
         <ClassroomImport
           onClose={() => setShowClassroomModal(false)}
-          onImport={(data) => setImportedClassroomData(data)}
+          onImport={(data) => {
+            setImportedClassroomData(data);
+            handleEvaluatePaper({
+              questionPaperText: data.questionPaperText,
+              questionPaperImgMeta: data.questionPaperImgMeta,
+              answerSheetImgMeta: data.answerSheetImgMeta,
+              answerSheetText: data.answerSheetText,
+              subjectOverride: data.subject,
+              studentNameOverride: data.studentName,
+            });
+          }}
         />
       )}
     </div>

@@ -48,14 +48,16 @@ export const initAuth = (
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      if (cachedAccessToken) {
-        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
+      const token = cachedAccessToken || localStorage.getItem('google_classroom_access_token');
+      if (token) {
+        if (onAuthSuccess) onAuthSuccess(user, token);
       } else {
-        // Fallback: If we don't have token in-memory but user matches, we request sign-in again
+        // Fallback: If we don't have token but user matches, we request sign-in again
         if (onAuthFailure) onAuthFailure();
       }
     } else {
       cachedAccessToken = null;
+      localStorage.removeItem('google_classroom_access_token');
       if (onAuthFailure) onAuthFailure();
     }
   });
@@ -70,6 +72,7 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
       throw new Error('Failed to get Google OAuth Access Token.');
     }
     cachedAccessToken = credential.accessToken;
+    localStorage.setItem('google_classroom_access_token', cachedAccessToken);
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.error('Google Classroom Sign-in incident:', error);
@@ -80,10 +83,11 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 export const getAccessToken = (): string | null => {
-  return cachedAccessToken;
+  return cachedAccessToken || localStorage.getItem('google_classroom_access_token');
 };
 
 export const logout = async () => {
   await signOut(auth);
   cachedAccessToken = null;
+  localStorage.removeItem('google_classroom_access_token');
 };

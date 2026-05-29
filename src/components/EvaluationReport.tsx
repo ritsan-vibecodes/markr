@@ -36,7 +36,7 @@ export default function EvaluationReport({ evaluation }: EvaluationReportProps) 
         <head>
           <title>Evaluation Report - ${studentName}</title>
           <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
             body {
               font-family: 'Inter', -apple-system, sans-serif;
               color: #111827;
@@ -62,7 +62,7 @@ export default function EvaluationReport({ evaluation }: EvaluationReportProps) 
               font-size: 14px;
               color: #4b5563;
               margin: 4px 0 0 0;
-              font-family: 'JetBrains Mono', monospace;
+              font-family: 'Inter', sans-serif;
             }
             .score-badge {
               text-align: right;
@@ -161,7 +161,7 @@ export default function EvaluationReport({ evaluation }: EvaluationReportProps) 
               border-bottom: 1px solid #f3f4f6;
             }
             .breakdown-q {
-              font-family: 'JetBrains Mono', monospace;
+              font-family: 'Inter', sans-serif;
               font-weight: 700;
               font-size: 13px;
             }
