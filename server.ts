@@ -1,14 +1,10 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;
@@ -17,7 +13,72 @@ const PORT = 3000;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-const DATA_DIR = path.join(__dirname, 'data');
+// Load Firebase Web API Key for ID token verification
+let FIREBASE_API_KEY = process.env.VITE_FIREBASE_API_KEY || '';
+if (!FIREBASE_API_KEY) {
+  try {
+    const cfgPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if (fs.existsSync(cfgPath)) {
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+      FIREBASE_API_KEY = cfg.apiKey;
+    }
+  } catch (err) {
+    console.error('Failed to read Firebase config on server:', err);
+  }
+}
+
+// Extend express Request definition to include user info
+interface AuthenticatedRequest extends express.Request {
+  user?: {
+    uid: string;
+    email: string;
+  };
+}
+
+const authenticateUser = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'Unauthorized: Missing or malformed Auth token' });
+    return;
+  }
+
+  const token = authHeader.split(' ')[1];
+  if (!token) {
+    res.status(401).json({ error: 'Unauthorized: Empty token' });
+    return;
+  }
+
+  // Verify token via standard identity toolkit API
+  try {
+    const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken: token })
+    });
+
+    if (!response.ok) {
+      res.status(401).json({ error: 'Unauthorized: Invalid authentication token' });
+      return;
+    }
+
+    const data: any = await response.json();
+    if (data && data.users && data.users.length > 0) {
+      const user = data.users[0];
+      (req as AuthenticatedRequest).user = {
+        uid: user.localId,
+        email: user.email
+      };
+      next();
+    } else {
+      res.status(401).json({ error: 'Unauthorized: User not found in auth server' });
+    }
+  } catch (error: any) {
+    console.error('Auth verification server error:', error);
+    res.status(401).json({ error: 'Unauthorized: Auth token verification failed', details: error.message });
+  }
+};
+
+const DATA_DIR = path.join(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'evaluations.json');
 
 // Initialize data storage directory and file
@@ -83,9 +144,10 @@ app.get('/api/health', (req, res) => {
 });
 
 // Get evaluation history
-app.get('/api/history', (req, res) => {
+app.get('/api/history', authenticateUser, (req: any, res) => {
   try {
-    const items = getEvaluations();
+    const userId = req.user.uid;
+    const items = getEvaluations().filter((evalItem: any) => evalItem.userId === userId);
     // Exclude oversized answerSheetBase64 to keep file index quick and lightweight
     const summaries = items.map(({ answerSheetBase64, ...rest }: any) => rest);
     res.json(summaries);
@@ -95,24 +157,39 @@ app.get('/api/history', (req, res) => {
 });
 
 // Get specific evaluation with base64 data to reconstruct canvas
-app.get('/api/history/:id', (req, res) => {
+app.get('/api/history/:id', authenticateUser, (req: any, res) => {
   try {
+    const userId = req.user.uid;
     const items = getEvaluations();
     const item = items.find((evalItem: any) => evalItem.id === req.params.id);
     if (!item) {
       res.status(404).json({ error: 'Evaluation not found' });
       return;
     }
+    if (item.userId !== userId) {
+      res.status(403).json({ error: 'Forbidden: You do not have permission to view this evaluation' });
+      return;
+    }
     res.json(item);
   } catch (error: any) {
-    res.status(500).json({ error: 'Failed to details for evaluation', details: error.message });
+    res.status(500).json({ error: 'Failed to fetch details for evaluation', details: error.message });
   }
 });
 
 // Delete evaluation history item
-app.delete('/api/history/:id', (req, res) => {
+app.delete('/api/history/:id', authenticateUser, (req: any, res) => {
   try {
+    const userId = req.user.uid;
     const items = getEvaluations();
+    const item = items.find((evalItem: any) => evalItem.id === req.params.id);
+    if (!item) {
+      res.status(404).json({ error: 'Evaluation not found' });
+      return;
+    }
+    if (item.userId !== userId) {
+      res.status(403).json({ error: 'Forbidden: You do not have permission to delete this evaluation' });
+      return;
+    }
     const updated = items.filter((evalItem: any) => evalItem.id !== req.params.id);
     saveEvaluations(updated);
     res.json({ success: true, message: 'Evaluation removed successfully' });
@@ -122,11 +199,12 @@ app.delete('/api/history/:id', (req, res) => {
 });
 
 // Get student performance and analytics details
-app.get('/api/analytics', (req, res) => {
+app.get('/api/analytics', authenticateUser, (req: any, res) => {
   try {
-    const items = getEvaluations();
+    const userId = req.user.uid;
+    const items = getEvaluations().filter((it: any) => it.userId === userId);
     if (items.length === 0) {
-       res.json({ subjects: [], stats: { totalEvaluations: 0, averageScore: 0, perfectScores: 0 }, timeline: [] });
+       res.json({ subjects: [], stats: { totalEvaluations: 0, averagePercentage: 0, perfectScores: 0 }, timeline: [] });
        return;
     }
 
@@ -165,7 +243,8 @@ app.get('/api/analytics', (req, res) => {
       subjectsMap[subName].exams += 1;
     });
 
-    const averagePercent = totalSum > 0 ? Math.round((earnedSum / totalSum) * 100) : 0;
+    const averagePercent = totalSum > 0 ? Math.round((earnedSum / totalSum) * 105) : 0; // Wait, let's keep it Math.round((earnedSum / totalSum) * 100)
+    const averagePercentageValue = totalSum > 0 ? Math.round((earnedSum / totalSum) * 100) : 0;
 
     const subjectsList = Object.entries(subjectsMap).map(([name, data]: [string, any]) => ({
       name,
@@ -177,7 +256,7 @@ app.get('/api/analytics', (req, res) => {
       subjects: subjectsList,
       stats: {
         totalEvaluations: totalCount,
-        averagePercentage: averagePercent,
+        averagePercentage: averagePercentageValue,
         perfectScores: perfectCount
       },
       timeline
@@ -188,7 +267,7 @@ app.get('/api/analytics', (req, res) => {
 });
 
 // Evaluate Exam Paper Endpoint
-app.post('/api/evaluate', async (req, res) => {
+app.post('/api/evaluate', authenticateUser, async (req: any, res) => {
   const {
     questionPaperText,
     questionPaperImgMeta, // { data: string, mimeType: string }
@@ -321,6 +400,7 @@ Maintain an encouraging but rigorous pedagogical standard. Frame feedback constr
     // Prepare complete record to save
     const completeRecord = {
       id: `eval_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      userId: req.user.uid,
       studentName: studentNameOverride || evaluationData.studentName || 'Student',
       subject: subjectOverride || evaluationData.subject || 'General Grader',
       examDate: new Date().toISOString().split('T')[0],
@@ -366,9 +446,15 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`AI Evaluator Server listening at http://localhost:${PORT}`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`AI Evaluator Server listening at http://localhost:${PORT}`);
+    });
+  }
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
